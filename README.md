@@ -50,7 +50,7 @@ pharma-rag/  (root)
 ## Quick start (local, VS Code / terminal)
 1. Clone repo:
 ```bash
-git clone <your-repo-url>
+git clone <(https://github.com/Imswappy/DocSage)>
 cd pharma-rag
 ```
 
@@ -127,27 +127,34 @@ curl -X POST "http://127.0.0.1:8000/query/" \
 
 ### Embeddings & similarity
 We map text to vectors in ℝᵈ using an embedding model:
-\ne\begin{align*}
-\mathbf{e} &= \text{Embed}(text) \in \mathbb{R}^d
-\end{align*}\n\nCosine similarity between query q and chunk vector v:\n\n\\[\n\\text{sim}(q, v) = \\frac{q \\cdot v}{\\|q\\|\\|v\\|}\n\\]\n\nHigher sim indicates higher relevance.
+<img width="332" height="50" alt="image" src="https://github.com/user-attachments/assets/663aeba8-7af4-424d-b155-d1dfafc4989f" />
+Cosine similarity between query q and document chunk vector v:
+<img width="287" height="87" alt="image" src="https://github.com/user-attachments/assets/e3c8facd-377c-445f-bf48-ac48ce9b8208" />
+Higher sim indicates higher relevance.
 
 ### Retrieval (top-k)
-Select the k most similar chunks to the query embedding. `top_k` trades off context vs cost/latency.
+Select the k most similar chunks to the query embedding. `top_k` trades off context vs cost/latency. Given a query embedding 
+𝑞 and indexed vectors (v1,v2...vn) , we compute similarity and select the k highest:
+<img width="424" height="71" alt="image" src="https://github.com/user-attachments/assets/fc094a7f-463b-44b8-8b9d-91df68a11d19" />
+top_k is a tradeoff: larger k → more context (higher recall), but more tokens and possibly more noise.
 
 ### Chunking rationale
 Chunk size and overlap preserve context across boundaries. Defaults: chunk ≈ 800 chars, overlap ≈ 150 chars.
 
 ### Maximal Marginal Relevance (MMR) — optional
 MMR balances relevance and novelty to reduce redundancy among retrieved chunks:
-\\[\n\\text{score}(D_i) = \\lambda \\cdot \\text{sim}(q, D_i) - (1-\\lambda) \\cdot \\max_{D_j \\in S} \\text{sim}(D_j, D_i)\n\\]
+<img width="692" height="82" alt="image" src="https://github.com/user-attachments/assets/62eb5deb-9297-413c-8439-15212900c087" />
+S is the set of already selected chunks, λ∈[0,1] controls diversity.
+
 
 ### Token estimate & cost (heuristic)
 Tokens ≈ characters / 4. Total tokens ≈ avg_chunk_chars × k / 4 + len(question)/4 + overhead.
-
 ---
 
 ## Evaluation & metrics
-- **Retrieval**: Recall@k.  
+- **Retrieval**: Recall@k-fraction of queries where a relevant doc appears in top-k
+<img width="620" height="110" alt="image" src="https://github.com/user-attachments/assets/c2a3cef8-7f3e-4075-990d-137c20721c64" />
+
 - **Generation**: human evaluation preferred; automatic metrics (ROUGE/BLEU) are weak.  
 - **Provenance accuracy**: how often citations truly support claims (human or automated checks).
 
@@ -199,3 +206,4 @@ Built with OSS: LangChain, Chroma, SentenceTransformers, Hugging Face Transforme
 
 ## Contact
 Open an issue or contact `imswappy.personal@gmail.com` for help or collaboration.
+
