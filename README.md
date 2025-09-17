@@ -2,6 +2,7 @@
 **Ask. Retrieve. Understand.** 🧠
 
 DocSage is a production-style Retrieval-Augmented-Generation (RAG) assistant that ingests arbitrary documents (PDF, DOCX, PPTX, TXT, CSV, images), indexes their semantic embeddings locally, retrieves the most relevant chunks for a question, and generates concise, source-backed answers — all runnable locally (no API keys required).
+<img width="1910" height="926" alt="image" src="https://github.com/user-attachments/assets/5da495c9-5aaf-4253-9481-f40d44501565" />
 
 ---
 
@@ -206,4 +207,5 @@ Built with OSS: LangChain, Chroma, SentenceTransformers, Hugging Face Transforme
 
 ## Contact
 Open an issue or contact `imswappy.personal@gmail.com` for help or collaboration.
+
 
