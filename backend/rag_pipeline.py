@@ -1,4 +1,17 @@
+# Cache and HF env fix - MUST be at very top BEFORE any transformers / sentence_transformers imports
 import os
+# Use writable cache directories to avoid PermissionError at /.cache in hosted environments
+os.environ.setdefault("TRANSFORMERS_CACHE", "/tmp/transformers_cache")
+os.environ.setdefault("HF_HOME", "/tmp/hf_home")
+os.environ.setdefault("HUGGINGFACE_HUB_CACHE", "/tmp/hf_cache")
+for d in (os.environ["TRANSFORMERS_CACHE"], os.environ["HF_HOME"], os.environ["HUGGINGFACE_HUB_CACHE"]):
+    try:
+        os.makedirs(d, exist_ok=True)
+        os.chmod(d, 0o777)
+    except Exception:
+        pass
+
+# ----- imports after cache env set -----
 import uuid
 from typing import List, Optional
 
@@ -14,6 +27,7 @@ from pdf2image import convert_from_path
 from PIL import Image
 from pptx import Presentation
 from PyPDF2 import PdfReader
+# Delay heavy transformer imports until needed
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, pipeline
 
 load_dotenv()
@@ -24,20 +38,27 @@ GEN_MODEL = os.getenv("GEN_MODEL", "google/flan-t5-small")
 CHROMA_DIR = os.getenv("CHROMA_DIR", "chroma_db")
 COLLECTION_NAME = os.getenv("COLLECTION_NAME", "docs")
 
-# Embeddings wrapper
+# Embeddings wrapper (will use TRANSFORMERS_CACHE set above)
 hf_emb = HuggingFaceEmbeddings(model_name=EMBED_MODEL_NAME)
 
-# Generator pipeline (local)
-device = 0 if torch.cuda.is_available() else -1
-_tokenizer = AutoTokenizer.from_pretrained(GEN_MODEL)
-_model = AutoModelForSeq2SeqLM.from_pretrained(GEN_MODEL)
-gen_pipeline = pipeline(
-    "text2text-generation",
-    model=_model,
-    tokenizer=_tokenizer,
-    device=device,
-    truncation=True
-)
+# Lazy generator pipeline
+_gen_pipeline = None
+def get_gen_pipeline():
+    global _gen_pipeline
+    if _gen_pipeline is None:
+        cache_dir = os.environ.get("TRANSFORMERS_CACHE")
+        # load tokenizer & model explicitly with cache_dir
+        tokenizer = AutoTokenizer.from_pretrained(GEN_MODEL, cache_dir=cache_dir)
+        model = AutoModelForSeq2SeqLM.from_pretrained(GEN_MODEL, cache_dir=cache_dir)
+        device = 0 if torch.cuda.is_available() else -1
+        _gen_pipeline = pipeline(
+            "text2text-generation",
+            model=model,
+            tokenizer=tokenizer,
+            device=device,
+            truncation=True
+        )
+    return _gen_pipeline
 
 # Prompt templates
 PROMPT_TEMPLATES = {
@@ -50,7 +71,7 @@ PROMPT_TEMPLATES = {
 def build_system_prompt(domain: Optional[str]) -> str:
     return PROMPT_TEMPLATES.get((domain or "").lower(), PROMPT_TEMPLATES["general"])
 
-# Extractors
+# Extractors (same as before)
 def extract_text_from_pdf(path: str) -> str:
     reader = PdfReader(path)
     texts = []
@@ -143,14 +164,14 @@ def build_retriever(k:int=5, domain: Optional[str]=None):
     vectordb = Chroma(persist_directory=CHROMA_DIR, embedding_function=hf_emb, collection_name=COLLECTION_NAME)
     retriever = vectordb.as_retriever(search_kwargs={"k": k})
     # simple domain filter (Chroma supports metadata filtering via where in some versions)
-    # You can implement filtering in a custom search using client.query if desired.
     return retriever
 
 # Generation
 def generate_answer_from_context(context: str, question: str, domain: Optional[str]=None, max_length:int=256) -> str:
+    gen = get_gen_pipeline()
     system = build_system_prompt(domain)
     prompt = f"{system}\n\nContext:\n{context}\n\nQuestion: {question}\nAnswer:"
-    out = gen_pipeline(prompt, max_length=max_length, do_sample=False)[0]["generated_text"]
+    out = gen(prompt, max_length=max_length, do_sample=False)[0]["generated_text"]
     return out
 
 def answer_query_local(question: str, retriever, top_k: int=5, domain: Optional[str]=None):

@@ -9,7 +9,7 @@ import streamlit as st
 APP_NAME = "DocSage"
 APP_TAGLINE = "Ask. Retrieve. Understand. — Source-backed Document Q&A"
 ACCENT = "#0f4c81"
-BACKEND_DEFAULT = "http://127.0.0.1:8000"
+BACKEND_DEFAULT = "https://imswappy-docsage.hf.space"
 
 st.set_page_config(page_title=APP_NAME, layout="wide")
 st.title(f"🧠 {APP_NAME}")

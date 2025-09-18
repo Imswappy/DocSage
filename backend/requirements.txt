@@ -19,3 +19,4 @@ pytesseract
 pdf2image
 pandas
 langchain-community
+nltk
