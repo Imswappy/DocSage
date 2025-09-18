@@ -1,4 +1,4 @@
-# frontend/streamlit_app.py
+# frontend/streamlit_app.py (fixed)
 import os
 import time
 from io import BytesIO
@@ -21,6 +21,8 @@ if "docs" not in st.session_state:
     st.session_state.docs = []
 if "backend_url" not in st.session_state:
     st.session_state.backend_url = BACKEND_DEFAULT
+if "last_ingest_results" not in st.session_state:
+    st.session_state.last_ingest_results = []
 
 # Sidebar
 with st.sidebar:
@@ -42,23 +44,43 @@ if ingest_btn:
     else:
         with st.spinner("Uploading & ingesting..."):
             prog = st.progress(0)
+            ingest_results = []
+            total = len(uploaded)
             for i, f in enumerate(uploaded):
-                files = {"file": (f.name, f.getvalue(), "application/octet-stream")}
+                # determine mime type if available
+                content_type = getattr(f, "type", "application/octet-stream") or "application/octet-stream"
+                files = {"file": (f.name, f.getvalue(), content_type)}
                 data = {"domain": domain_choice, "tags": tags_input}
                 try:
-                    r = requests.post(f"{st.session_state.backend_url.rstrip('/')}/ingest/", files=files, data=data, timeout=300)
-                    if r.status_code == 200:
-                        j = r.json()
-                        st.sidebar.success(f"Ingested {f.name} — chunks: {j.get('chunks')}")
+                    url = st.session_state.backend_url.rstrip("/") + "/ingest/"
+                    r = requests.post(url, files=files, data=data, timeout=300)
+                    if r is None:
+                        st.sidebar.error(f"Failed {f.name}: No response from server.")
+                        ingest_results.append({"file": f.name, "status": "no_response"})
+                    elif r.status_code == 200:
+                        try:
+                            j = r.json()
+                            chunks = j.get("chunks", None)
+                        except Exception:
+                            chunks = None
+                        st.sidebar.success(f"Ingested {f.name} — chunks: {chunks}")
+                        ingest_results.append({"file": f.name, "status": "ok", "chunks": chunks})
                         if f.name not in st.session_state.docs:
                             st.session_state.docs.append(f.name)
                     else:
-                        st.sidebar.error(f"Failed {f.name}: {r.text}")
+                        # show server error text safely
+                        text = r.text if hasattr(r, "text") else str(r)
+                        st.sidebar.error(f"Failed {f.name}: {r.status_code} — {text}")
+                        ingest_results.append({"file": f.name, "status": "error", "detail": text})
                 except Exception as e:
                     st.sidebar.error(f"Error {f.name}: {e}")
-                prog.progress(int((i+1)/len(uploaded)*100))
+                    ingest_results.append({"file": f.name, "status": "exception", "detail": str(e)})
+                prog.progress(int((i+1)/total*100))
             prog.empty()
-        st.experimental_rerun()
+            st.session_state.last_ingest_results = ingest_results
+            # Instead of st.experimental_rerun() which can cause issues in some deploys,
+            # we update state and show a summary message.
+            st.success("Ingestion completed. See sidebar messages for per-file status.")
 
 # Main UI
 col_main, col_meta = st.columns([3,1])
@@ -76,12 +98,17 @@ with col_main:
             payload = {"question": question, "top_k": int(k_val), "adaptive_k": bool(adaptive_k), "domain": domain_for_query}
             with st.spinner("Querying backend..."):
                 try:
-                    r = requests.post(f"{st.session_state.backend_url.rstrip('/')}/query/", json=payload, timeout=300)
+                    url = st.session_state.backend_url.rstrip("/") + "/query/"
+                    r = requests.post(url, json=payload, timeout=300)
                 except Exception as e:
                     st.error(f"Request failed: {e}")
                     r = None
-                if r and r.status_code == 200:
-                    resp = r.json()
+                if r and getattr(r, "status_code", None) == 200:
+                    try:
+                        resp = r.json()
+                    except Exception as e:
+                        st.error(f"Failed to parse JSON from backend: {e}")
+                        resp = {}
                     answer = resp.get("answer","")
                     citations = resp.get("citations",[])
                     st.subheader("Answer")
@@ -101,15 +128,22 @@ with col_main:
                     # Save to history
                     st.session_state.history.insert(0, {"q": question, "a": answer, "citations": citations})
                 else:
-                    st.error(f"Backend error: {r.status_code if r else 'N/A'} — {r.text if r else ''}")
+                    status = r.status_code if r else "N/A"
+                    text = r.text if r else ""
+                    st.error(f"Backend error: {status} — {text}")
 
     st.markdown("### Conversation history")
+    remove_indices = []
     for idx, h in enumerate(st.session_state.history):
         st.markdown(f"**Q:** {h['q']}")
         st.markdown(f"**A:** {h['a']}")
         if st.button("Remove", key=f"rm_{idx}"):
-            st.session_state.history.pop(idx)
-            st.experimental_rerun()
+            remove_indices.append(idx)
+    if remove_indices:
+        # remove items after rendering to avoid iterator issues
+        for i in sorted(remove_indices, reverse=True):
+            st.session_state.history.pop(i)
+        st.experimental_rerun()
 
 with col_meta:
     st.markdown("### Ingested files")
