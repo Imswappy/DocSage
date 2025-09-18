@@ -123,6 +123,7 @@ curl -X POST "http://127.0.0.1:8000/query/" \
 - **Optional**: OpenAI Embeddings / Chat or Google Gemini via LangChain integrations (if you opt for cloud APIs).
 
 ---
+<img width="1913" height="799" alt="image" src="https://github.com/user-attachments/assets/e261144e-799b-4595-b04b-17a2cf03009c" />
 
 ## Mathematical & algorithmic intuitions
 
@@ -207,5 +208,6 @@ Built with OSS: LangChain, Chroma, SentenceTransformers, Hugging Face Transforme
 
 ## Contact
 Open an issue or contact `imswappy.personal@gmail.com` for help or collaboration.
+
 
 
